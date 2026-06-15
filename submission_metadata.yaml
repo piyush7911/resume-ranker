@@ -1,0 +1,81 @@
+# Redrob Hackathon — Submission Metadata
+# Personal/team fields (TODO) are placeholders — fill before submitting.
+# Compute + methodology fields reflect this repository as-is.
+
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "SkillFusion"
+
+primary_contact:
+  name: "Piyush Patil"
+  email: "piyushpatil7911@gmail.com"
+  phone: "+91-9371432334"
+
+team_members:
+  - name: "Piyush Patil"
+    email: "piyushpatil7911@gmail.com"
+    role: "Jr AI/ML Engineer"
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/piyush7911/resume-ranker"
+
+sandbox_link: "https://huggingface.co/spaces/piyush7911/resume-ranker"
+
+reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
+# Ranking step runs end-to-end in ~19s on CPU with no network. It depends on the
+# committed artifacts/semantic_scores.tsv (regenerable offline via
+# precompute_embeddings.py).
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "MacBook Air m3 (Apple Silicon)"
+  cpu_cores: 8
+  ram_gb: 16
+  python_version: "3.11"
+  os: "macOS"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: true
+  pre_computation_time_minutes: 1            # ~17s TF-IDF pass over 100K
+
+# ============================================================================
+# AI tools declaration  (transparency only — not penalized)
+# ============================================================================
+ai_tools_used:
+  - "Claude and Codex"        # architecture discussion, code review, data profiling
+
+ai_usage_summary: |
+  Used Claude and Codex for data profiling, architectural discussion, and code review.
+  No candidate data was sent to any hosted LLM. The ranking system is fully
+  deterministic and makes no network/LLM calls at inference time.
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Interpretable, role-gated multiplicative ranker. The candidate's job TITLE
+  gates the whole score (off-target titles capped near zero), which neutralizes
+  the 2,774 keyword-stuffers a dense-cosine ranker would surface. Five structural
+  components (skill-trust, career-narrative evidence, YOE, stability, location/
+  education) form StructuralFit; a low-weight (0.20) gated TF-IDF semantic score
+  over career narratives surfaces plain-language adjacent fits without rescuing
+  stuffers. A bounded behavioral multiplier down-weights stale/unresponsive
+  candidates, and a deterministic 8-rule honeypot filter zeroes impossible
+  profiles (top-100 honeypot rate 0%). Reasoning is generated from extracted
+  facts only (zero hallucination), varied per candidate, with honest concerns
+  and rank-scaled tone. Runtime ~19s for 100K on CPU, no network.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true
+  reproduction_tested: true

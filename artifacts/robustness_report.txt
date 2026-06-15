@@ -1,0 +1,42 @@
+[robustness] scoring + labeling under 4 proxies ...
+[robustness] 100000 candidates
+
+Tier distribution per proxy (how each defines the relevant pool):
+  skill          {0: 80421, 1: 15130, 2: 3142, 3: 760, 4: 404, 5: 143}
+  career         {0: 79683, 1: 13881, 2: 6069, 3: 145, 4: 44, 5: 178}
+  availability   {0: 76491, 1: 15370, 2: 2957, 3: 3289, 4: 1591, 5: 302}
+  strict_senior  {0: 76491, 1: 23011, 2: 165, 3: 185, 4: 109, 5: 39}
+
+=== OUR RANKER scored under each INDEPENDENT proxy ===
+  proxy           ndcg10  ndcg50    MAP   P10 oracle_n10  top10∩oracle
+  skill           1.0000  0.9042  1.000  1.00     1.0000          2/10
+  career          0.9595  0.9066  1.000  1.00     1.0000          1/10
+  availability    0.9642  0.8521  1.000  1.00     1.0000          1/10
+  strict_senior   0.7185  0.6816  0.766  1.00     1.0000          2/10
+
+=== PROXY INDEPENDENCE (top-100 Jaccard between proxy oracles) ===
+                      skill     career  availabil  strict_se
+  skill                1.00       0.16       0.08       0.22
+  career               0.16       1.00       0.08       0.27
+  availability         0.08       0.08       1.00       0.06
+  strict_senior        0.22       0.27       0.06       1.00
+  (low off-diagonal = proxies genuinely disagree on who's relevant)
+
+=== ROBUSTNESS OF OUR TOP-10 ACROSS ALL FOUR PROXIES ===
+  rank  1 CAND_0018499   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 5} min=5
+  rank  2 CAND_0002025   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 4} min=4
+  rank  3 CAND_0077337   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 4} min=4
+  rank  4 CAND_0081846   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 5} min=5
+  rank  5 CAND_0006418   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 4} min=4
+  rank  6 CAND_0046525   tiers={'skill': 5, 'career': 4, 'availability': 5, 'strict_senior': 4} min=4
+  rank  7 CAND_0011687   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 5} min=5
+  rank  8 CAND_0096142   tiers={'skill': 5, 'career': 5, 'availability': 4, 'strict_senior': 4} min=4
+  rank  9 CAND_0052682   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 5} min=5
+  rank 10 CAND_0079387   tiers={'skill': 5, 'career': 5, 'availability': 5, 'strict_senior': 4} min=4
+  skill         : 100% of our top-10 are tier>=4
+  career        : 100% of our top-10 are tier>=4
+  availability  : 100% of our top-10 are tier>=4
+  strict_senior : 100% of our top-10 are tier>=4
+
+  WORST-CASE: every one of our top-10 is at least tier 4 under EVERY proxy.
+

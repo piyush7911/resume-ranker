@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Ranker — System Architecture</title>
+  <style>
+    :root {
+      --ink: #0f172a;
+      --mut: #64748b;
+      --line: #e2e8f0;
+      --bg: #f6f7f9;
+      --card: #ffffff;
+      --indigo: #4f46e5;
+      --teal: #0d9488;
+      --rose: #e11d48;
+      --amber: #d97706;
+      --slate: #475569;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased
+    }
+
+    .shell {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 24px 20px 60px
+    }
+
+    .head {
+      margin-bottom: 14px
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -.01em
+    }
+
+    .sub {
+      color: var(--mut);
+      font-size: 13.5px;
+      margin-top: 5px;
+      max-width: 680px;
+      line-height: 1.5
+    }
+
+    .legend {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 6px 0 14px;
+      font-size: 12px;
+      color: var(--mut)
+    }
+
+    .legend .k {
+      display: flex;
+      align-items: center;
+      gap: 7px
+    }
+
+    .swatch {
+      width: 22px;
+      height: 0;
+      border-top: 2.5px solid var(--indigo)
+    }
+
+    .swatch.dash {
+      border-top-style: dashed;
+      border-color: var(--amber)
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+      display: inline-block
+    }
+
+    .canvas-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background:
+        radial-gradient(circle, #e7eaf0 1px, transparent 1.4px) 0 0/22px 22px, var(--card);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04)
+    }
+
+    .canvas {
+      position: relative;
+      width: 1180px;
+      height: 880px
+    }
+
+    svg.edges {
+      position: absolute;
+      inset: 0;
+      width: 1180px;
+      height: 880px;
+      pointer-events: none
+    }
+
+    .lane-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      fill: var(--slate);
+      opacity: .8
+    }
+
+    /* edges: always animating marching ants */
+    @keyframes march {
+      to {
+        stroke-dashoffset: -26
+      }
+    }
+
+    .edge {
+      stroke-dasharray: 7 6;
+      animation: march .85s linear infinite
+    }
+
+    .edge.dash {
+      stroke-dasharray: 6 6
+    }
+
+    .edge.hot {
+      animation-duration: .5s;
+      filter: drop-shadow(0 1px 3px rgba(79, 70, 229, .5))
+    }
+
+    .edge.cold {
+      opacity: .12
+    }
+
+    .node {
+      position: absolute;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 13px 11px 16px;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .15s, border-color .15s, opacity .15s;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+      overflow: hidden;
+      user-select: none
+    }
+
+    .node:before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      background: var(--slate)
+    }
+
+    .node.c-data:before,
+    .node.c-pre:before {
+      background: var(--teal)
+    }
+
+    .node.c-rank:before {
+      background: var(--indigo)
+    }
+
+    .node.c-kill:before {
+      background: var(--rose)
+    }
+
+    .node.c-out:before {
+      background: #16a34a
+    }
+
+    .node:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, .10);
+      border-color: #cbd5e1
+    }
+
+    .node.active {
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, .25), 0 10px 26px rgba(15, 23, 42, .14);
+      transform: translateY(-2px) scale(1.03)
+    }
+
+    .node.dim {
+      opacity: .28
+    }
+
+    .node .t {
+      font-size: 13.5px;
+      font-weight: 650;
+      line-height: 1.2
+    }
+
+    .node .s {
+      font-size: 11.5px;
+      color: var(--mut);
+      margin-top: 3px;
+      line-height: 1.35
+    }
+
+    .node .f {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10.5px;
+      color: var(--indigo);
+      margin-top: 5px;
+      opacity: .9
+    }
+
+    .node .pin {
+      position: absolute;
+      top: 9px;
+      right: 11px;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      padding: 2px 7px;
+      border-radius: 999px
+    }
+
+    .pin.timed {
+      background: #eef2ff;
+      color: var(--indigo)
+    }
+
+    .pin.off {
+      background: #ecfeff;
+      color: var(--teal)
+    }
+
+    .pin.kill {
+      background: #ffe4e6;
+      color: var(--rose)
+    }
+
+    .tools {
+      position: absolute;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: opacity .15s
+    }
+
+    .tools.dim {
+      opacity: .28
+    }
+
+    .tools .hd {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--amber);
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fffbeb
+    }
+
+    .trow {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 11px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+      transition: .12s
+    }
+
+    .trow:last-child {
+      border-bottom: 0
+    }
+
+    .trow:hover {
+      background: #f8fafc
+    }
+
+    .trow.active {
+      background: #eef2ff
+    }
+
+    .trow .ti {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      color: var(--slate);
+      min-width: 96px;
+      font-weight: 600
+    }
+
+    .trow .td {
+      font-size: 11.5px;
+      color: var(--mut);
+      line-height: 1.35
+    }
+
+    .detail {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 18px
+    }
+
+    @media(max-width:900px) {
+      .detail {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px
+    }
+
+    .panel .eye {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--indigo)
+    }
+
+    .panel h2 {
+      font-size: 18px;
+      margin: 6px 0 4px
+    }
+
+    .panel .file {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 12px;
+      color: var(--teal)
+    }
+
+    .panel p {
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: #334155;
+      margin: 12px 0 0
+    }
+
+    .kv {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px
+    }
+
+    .kv:last-child {
+      border-bottom: 0
+    }
+
+    .kv .k {
+      color: var(--mut)
+    }
+
+    .kv .v {
+      font-weight: 600
+    }
+
+    .side h3 {
+      font-size: 12px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin: 0 0 10px
+    }
+
+    footer {
+      margin-top: 26px;
+      color: var(--mut);
+      font-size: 12px
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+
+    <div class="head">
+      <h1>Resume Ranker — System Architecture</h1>
+      <div class="sub">How a 100,000-candidate pool becomes a trap-proof top-100. Click any node to trace its
+        connections and read what it does — the pipeline animates continuously.</div>
+    </div>
+
+    <div class="legend">
+      <div class="k"><span class="swatch"></span> data flow</div>
+      <div class="k"><span class="swatch dash"></span> uses / validates</div>
+      <div class="k"><span class="dot" style="background:#0d9488"></span> input &amp; precompute</div>
+      <div class="k"><span class="dot" style="background:#4f46e5"></span> ranking step (timed)</div>
+      <div class="k"><span class="dot" style="background:#e11d48"></span> hard filter</div>
+      <div class="k"><span class="dot" style="background:#16a34a"></span> output</div>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="canvas" id="canvas">
+        <svg class="edges" id="svg" viewBox="0 0 1180 880">
+          <defs>
+            <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"
+              markerUnits="userSpaceOnUse">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#94a3b8" />
+            </marker>
+            <marker id="ah-hi" markerWidth="11" markerHeight="11" refX="7" refY="3" orient="auto"
+              markerUnits="userSpaceOnUse">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#4f46e5" />
+            </marker>
+          </defs>
+          <rect x="24" y="64" width="272" height="180" rx="14" fill="#eef2ff" opacity=".55" />
+          <rect x="24" y="292" width="272" height="300" rx="14" fill="#ecfeff" opacity=".7" />
+          <rect x="376" y="64" width="308" height="784" rx="14" fill="#f0fdf4" opacity=".7" />
+          <rect x="744" y="64" width="412" height="472" rx="14" fill="#fffbeb" opacity=".6" />
+          <text class="lane-label" x="40" y="84">Inputs</text>
+          <text class="lane-label" x="40" y="312">Offline · precompute</text>
+          <text class="lane-label" x="392" y="84">Ranking step · ≤5 min · CPU · no network</text>
+          <text class="lane-label" x="760" y="84">Validation &amp; tooling</text>
+          <g id="edgeLayer"></g>
+        </svg>
+
+        <div class="node c-data" data-n="data" style="left:40px;top:92px;width:240px;height:64px">
+          <div class="t">candidates.jsonl</div>
+          <div class="s">100,000 profiles · streamed</div>
+          <div class="f">loader.py</div>
+        </div>
+        <div class="node c-data" data-n="jd" style="left:40px;top:176px;width:240px;height:64px">
+          <div class="t">JD knowledge</div>
+          <div class="s">role bands · skill relevance · geo</div>
+          <div class="f">jd.py</div>
+        </div>
+
+        <div class="node c-pre" data-n="text" style="left:40px;top:320px;width:240px;height:60px">
+          <div class="t">Career-narrative builder</div>
+          <div class="s">descriptions + titles (not skills)</div>
+        </div>
+        <div class="node c-pre" data-n="tfidf" style="left:40px;top:412px;width:240px;height:60px">
+          <div class="t">TF-IDF · cosine vs JD</div>
+          <div class="s">scikit-learn</div>
+        </div>
+        <div class="node c-pre" data-n="artifact" style="left:40px;top:504px;width:240px;height:60px">
+          <div class="t">semantic_scores.tsv</div>
+          <div class="s">2 MB artifact · reused</div>
+        </div>
+
+        <div class="node c-rank" data-n="loader" style="left:400px;top:92px;width:260px;height:64px">
+          <span class="pin off">offline-fed</span>
+          <div class="t">Stream loader</div>
+          <div class="s">.jsonl / .jsonl.gz, flat memory</div>
+        </div>
+        <div class="node c-kill" data-n="honeypot" style="left:400px;top:208px;width:260px;height:64px">
+          <span class="pin kill">→ 0</span>
+          <div class="t">Honeypot filter</div>
+          <div class="s">8 impossibility rules · ~91 caught</div>
+          <div class="f">honeypot.py</div>
+        </div>
+        <div class="node c-rank" data-n="features" style="left:400px;top:324px;width:260px;height:64px">
+          <div class="t">Feature extraction</div>
+          <div class="s">title→band · skill-trust · evidence</div>
+          <div class="f">features.py</div>
+        </div>
+        <div class="node c-rank" data-n="scoring" style="left:400px;top:444px;width:260px;height:92px">
+          <span class="pin timed">timed</span>
+          <div class="t">Composite scoring</div>
+          <div class="s"
+            style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#3730a3;margin-top:5px;line-height:1.5">
+            Role × (.82 Struct + .18 Sem)<br>× Behav × Geo × Honeypot</div>
+        </div>
+        <div class="node c-rank" data-n="sort" style="left:400px;top:584px;width:260px;height:60px">
+          <div class="t">Sort → top-100</div>
+          <div class="s">ties: candidate_id ascending</div>
+        </div>
+        <div class="node c-rank" data-n="reason" style="left:400px;top:684px;width:260px;height:60px">
+          <div class="t">Reasoning generator</div>
+          <div class="s">fact-based · 100/100 unique</div>
+        </div>
+        <div class="node c-out" data-n="csv" style="left:400px;top:784px;width:260px;height:64px">
+          <div class="t">submission.csv</div>
+          <div class="s">candidate_id, rank, score, reasoning</div>
+        </div>
+
+        <div class="tools" id="tools" style="left:760px;top:120px;width:380px">
+          <div class="hd">Exercises the same pipeline</div>
+          <div class="trow" data-n="eval">
+            <div class="ti">eval.py</div>
+            <div class="td">proxy ground-truth metrics + ablation (each lever earns its place)</div>
+          </div>
+          <div class="trow" data-n="sweep">
+            <div class="ti">sweep.py</div>
+            <div class="td">structural sub-weight sweep — robust, JD-defensible tuning</div>
+          </div>
+          <div class="trow" data-n="robust">
+            <div class="ti">robustness.py</div>
+            <div class="td">4 independent rubrics — top-10 stays tier-4+ under all</div>
+          </div>
+          <div class="trow" data-n="tests">
+            <div class="ti">tests/</div>
+            <div class="td">honeypot/stuffer regression + top-10 stability</div>
+          </div>
+          <div class="trow" data-n="app">
+            <div class="ti">app.py</div>
+            <div class="td">Streamlit sandbox — same scoring via pipeline.py</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail">
+      <div class="panel" id="panel"></div>
+      <div class="side">
+        <div class="panel">
+          <h3>At a glance</h3>
+          <div class="kv"><span class="k">Pool</span><span class="v">100,000</span></div>
+          <div class="kv"><span class="k">Ranking runtime</span><span class="v">~19 s (CPU)</span></div>
+          <div class="kv"><span class="k">Keyword stuffers</span><span class="v">2,774 excluded</span></div>
+          <div class="kv"><span class="k">Honeypots in top-100</span><span class="v">0 / 100</span></div>
+          <div class="kv"><span class="k">NDCG@10 (proxy)</span><span class="v">0.96</span></div>
+          <div class="kv"><span class="k">Dependencies</span><span class="v">numpy · sklearn · orjson</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const NODES = {
+      data: { x: 40, y: 92, w: 240, h: 64 }, jd: { x: 40, y: 176, w: 240, h: 64 },
+      text: { x: 40, y: 320, w: 240, h: 60 }, tfidf: { x: 40, y: 412, w: 240, h: 60 }, artifact: { x: 40, y: 504, w: 240, h: 60 },
+      loader: { x: 400, y: 92, w: 260, h: 64 }, honeypot: { x: 400, y: 208, w: 260, h: 64 }, features: { x: 400, y: 324, w: 260, h: 64 },
+      scoring: { x: 400, y: 444, w: 260, h: 92 }, sort: { x: 400, y: 584, w: 260, h: 60 }, reason: { x: 400, y: 684, w: 260, h: 60 },
+      csv: { x: 400, y: 784, w: 260, h: 64 }
+    };
+    const R = n => ({ x: NODES[n].x + NODES[n].w, y: NODES[n].y + NODES[n].h / 2 });
+    const Lf = n => ({ x: NODES[n].x, y: NODES[n].y + NODES[n].h / 2 });
+    const Tp = n => ({ x: NODES[n].x + NODES[n].w / 2, y: NODES[n].y });
+    const Bt = n => ({ x: NODES[n].x + NODES[n].w / 2, y: NODES[n].y + NODES[n].h });
+
+    const EDGES = [
+      { id: "e1", from: "data", to: "loader", pts: [R("data"), Lf("loader")] },
+      { id: "e2", from: "data", to: "text", pts: [Bt("data"), Tp("text")] },
+      { id: "e3", from: "text", to: "tfidf", pts: [Bt("text"), Tp("tfidf")] },
+      { id: "e4", from: "tfidf", to: "artifact", pts: [Bt("tfidf"), Tp("artifact")] },
+      { id: "e5", from: "jd", to: "tfidf", pts: [R("jd"), { x: 320, y: 208 }, { x: 320, y: 442 }, R("tfidf")], dash: true },
+      { id: "e6", from: "jd", to: "features", pts: [R("jd"), { x: 352, y: 208 }, { x: 352, y: 356 }, Lf("features")], dash: true },
+      { id: "e7", from: "artifact", to: "scoring", pts: [R("artifact"), { x: 360, y: 534 }, { x: 360, y: 490 }, Lf("scoring")] },
+      { id: "e8", from: "loader", to: "honeypot", pts: [Bt("loader"), Tp("honeypot")] },
+      { id: "e9", from: "honeypot", to: "features", pts: [Bt("honeypot"), Tp("features")] },
+      { id: "e10", from: "features", to: "scoring", pts: [Bt("features"), Tp("scoring")] },
+      { id: "e11", from: "scoring", to: "sort", pts: [Bt("scoring"), Tp("sort")] },
+      { id: "e12", from: "sort", to: "reason", pts: [Bt("sort"), Tp("reason")] },
+      { id: "e13", from: "reason", to: "csv", pts: [Bt("reason"), Tp("csv")] },
+      { id: "e14", from: "scoring", to: "tools", pts: [R("scoring"), { x: 712, y: 490 }, { x: 712, y: 300 }, { x: 760, y: 300 }], dash: true }
+    ];
+
+    const layer = document.getElementById("edgeLayer");
+    EDGES.forEach(e => {
+      const d = "M " + e.pts.map(p => `${p.x} ${p.y}`).join(" L ");
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", d); p.setAttribute("fill", "none");
+      p.setAttribute("stroke", e.dash ? "#cbb27a" : "#9aa7bd");
+      p.setAttribute("stroke-width", "2");
+      p.setAttribute("marker-end", "url(#ah)");
+      p.dataset.id = e.id;
+      p.classList.add("edge"); if (e.dash) p.classList.add("dash");
+      layer.appendChild(p);
+    });
+
+    const adj = {};
+    EDGES.forEach(e => { (adj[e.from] = adj[e.from] || []).push(e.id); (adj[e.to] = adj[e.to] || []).push(e.id); });
+
+    const DETAIL = {
+      data: {
+        eye: "Input", t: "candidates.jsonl", file: "resume_ranker/loader.py",
+        p: "100,000 candidate profiles, one JSON object per line (~465MB). Streamed line-by-line so memory stays flat; gzip is decompressed transparently. Each record carries profile, career_history, education, skills and 23 behavioral signals."
+      },
+      jd: {
+        eye: "Input · knowledge", t: "JD knowledge base", file: "resume_ranker/jd.py",
+        p: "The encoded reading of the Senior AI Engineer JD: role bands (core / adjacent / off-target), per-skill relevance weights, career-evidence regexes, consulting/product company lists, location & geo rules, and the JD requirement text used by the semantic step. The single auditable source of 'what the job wants'."
+      },
+      text: {
+        eye: "Offline · precompute", t: "Career-narrative builder", file: "precompute_embeddings.py",
+        p: "Concatenates each candidate's career descriptions and titles (deliberately NOT the skills list). Stuffers inject skills, not fabricated prose about systems they built — so embedding the narrative resists keyword stuffing."
+      },
+      tfidf: {
+        eye: "Offline · precompute", t: "TF-IDF · cosine vs JD", file: "precompute_embeddings.py",
+        p: "scikit-learn TF-IDF (1–2 grams) over the corpus; cosine similarity of each narrative against the JD requirement text. Percentile-normalized to [0,1]. No network, no heavyweight model — runs in ~17s."
+      },
+      artifact: {
+        eye: "Offline · artifact", t: "semantic_scores.tsv", file: "artifacts/",
+        p: "A 2MB candidate→score table written once. The ranking step just reads it, so the timed step needs no model and no network. Delete it and the ranker still runs (structural-only)."
+      },
+      loader: {
+        eye: "Ranking step", t: "Stream loader", file: "resume_ranker/loader.py",
+        p: "Streams the pool for the timed ranking step, merging in the precomputed semantic score per candidate. One pass, constant memory."
+      },
+      honeypot: {
+        eye: "Ranking · hard filter", t: "Honeypot filter", file: "resume_ranker/honeypot.py",
+        p: "Eight deterministic consistency rules detect 'subtly impossible' profiles (tenure > elapsed time, expert-in-0-months, YOE > career span, future cert years…). Any hit forces score 0. Caught ~91 with zero false positives — and honeypots deliberately wear genuine AI titles, which is exactly why a title/keyword ranker fails."
+      },
+      features: {
+        eye: "Ranking", t: "Feature extraction", file: "resume_ranker/features.py",
+        p: "Turns a record into scored facts: current_title → role band; skills → trust-weighted relevance (endorsements × months × proficiency); career text → production / deployment / evaluation evidence; product-vs-services; tenure & job-hopping; location and behavioral facts. These same facts feed the reasoning text → zero hallucination."
+      },
+      scoring: {
+        eye: "Ranking · timed", t: "Composite scoring", file: "resume_ranker/scoring.py",
+        p: "Multiplicative because fit is conjunctive: score = RoleFit × (0.82·Structural + 0.18·Semantic) × Behavioral × Geo × Honeypot. The role gate dominates (off-target titles capped ~0.10), defeating the 2,774 keyword-stuffers a dense-cosine ranker would surface. Structural = weighted sum of career 0.36, skill 0.30, yoe 0.14, location 0.09, stability 0.06, education 0.05."
+      },
+      sort: {
+        eye: "Ranking", t: "Sort → top-100", file: "resume_ranker/pipeline.py",
+        p: "Sorts by score descending; equal scores broken by candidate_id ascending (spec rule). Keeps exactly the top 100."
+      },
+      reason: {
+        eye: "Ranking", t: "Reasoning generator", file: "resume_ranker/reasoning.py",
+        p: "Builds a 1–2 sentence justification per pick from extracted facts only: a specific fact + a JD connection + honest concerns, with tone scaled to rank. Deterministic, LLM-free, 100/100 unique — engineered to pass the six Stage-4 reasoning checks."
+      },
+      csv: {
+        eye: "Output", t: "submission.csv", file: "rank.py",
+        p: "The deliverable: header + exactly 100 rows of candidate_id, rank, score, reasoning. Passes the official validator; score is non-increasing with rank."
+      },
+      eval: {
+        eye: "Validation", t: "eval.py — metrics & ablation", file: "eval.py",
+        p: "Builds a fact-based proxy ground truth and reports NDCG@10/50, MAP, P@10 plus an ablation table. Removing the role gate, honeypot filter, behavioral or semantic component each measurably hurts — proof every lever earns its place."
+      },
+      sweep: {
+        eye: "Tooling", t: "sweep.py — weight sweep", file: "sweep.py",
+        p: "Evaluates 1,000+ structural weight configs as fast array math. Used to pick a robust, JD-defensible weighting — explicitly rejecting the degenerate proxy-max that zeroed the skill weight (overfitting)."
+      },
+      robust: {
+        eye: "Validation", t: "robustness.py — multi-proxy", file: "robustness.py",
+        p: "Scores the ranking under four INDEPENDENT relevance rubrics (skill / career / availability / strict-senior) that overlap only 0.06–0.27. Result: every top-10 pick is tier-4+ under all four — robustness to the unknown real rubric, not a meaningless self-1.00."
+      },
+      tests: {
+        eye: "Validation", t: "tests/", file: "tests/test_traps.py · test_stability.py",
+        p: "11 trap/unit tests (honeypots & stuffers stay out of top-100, role-band gate, skill-trust, reasoning hygiene) plus a top-10 stability test under behavioral noise. Regression guard for the git history Stage-4 reviews."
+      },
+      app: {
+        eye: "Sandbox", t: "app.py — Streamlit demo", file: "app.py",
+        p: "The mandatory hosted sandbox (spec §10.5). Upload ≤100 candidates or use the sample; ranks end-to-end on CPU in milliseconds, shows the per-component breakdown and filtered honeypots, downloads submission.csv. Uses the exact same pipeline.py as rank.py."
+      }
+    };
+
+    const panel = document.getElementById("panel");
+    function show(n) {
+      const d = DETAIL[n]; if (!d) return;
+      panel.innerHTML = `<div class="eye">${d.eye}</div><h2>${d.t}</h2>` +
+        (d.file ? `<div class="file">${d.file}</div>` : ``) + `<p>${d.p}</p>`;
+    }
+
+    const allNodes = document.querySelectorAll(".node");
+    const allRows = document.querySelectorAll(".trow");
+    const allEdges = document.querySelectorAll(".edge");
+    const tools = document.getElementById("tools");
+
+    function select(n, isTool) {
+      // reset
+      allNodes.forEach(x => x.classList.remove("active", "dim"));
+      allRows.forEach(x => x.classList.remove("active"));
+      tools.classList.remove("dim");
+      allEdges.forEach(p => {
+        p.classList.remove("hot", "cold");
+        p.setAttribute("stroke", p.classList.contains("dash") ? "#cbb27a" : "#9aa7bd");
+        p.setAttribute("stroke-width", "2"); p.setAttribute("marker-end", "url(#ah)");
+      });
+
+      const incident = new Set(isTool ? ["e14"] : (adj[n] || []));
+
+      if (isTool) {
+        allNodes.forEach(x => { if (x.dataset.n === "scoring") x.classList.add("active"); else x.classList.add("dim"); });
+        allRows.forEach(x => { if (x.dataset.n === n) x.classList.add("active"); });
+      } else {
+        allNodes.forEach(x => { if (x.dataset.n === n) x.classList.add("active"); else x.classList.add("dim"); });
+        tools.classList.add("dim");
+      }
+      allEdges.forEach(p => {
+        if (incident.has(p.dataset.id)) {
+          p.classList.add("hot");
+          p.setAttribute("stroke", "#4f46e5"); p.setAttribute("stroke-width", "3.4");
+          p.setAttribute("marker-end", "url(#ah-hi)");
+        } else { p.classList.add("cold"); }
+      });
+      show(n);
+    }
+
+    allNodes.forEach(el => el.addEventListener("click", () => select(el.dataset.n, false)));
+    allRows.forEach(el => el.addEventListener("click", () => select(el.dataset.n, true)));
+
+    show("scoring");  // intro content; no highlight until a click
+  </script>
+</body>
+
+</html>
